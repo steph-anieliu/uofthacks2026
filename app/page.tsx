@@ -16,8 +16,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
-  const [originalLanguage, setOriginalLanguage] = useState<'zh' | 'en'>('zh')
-  const [targetLanguage, setTargetLanguage] = useState<'zh' | 'en'>('en')
+  const [originalLanguage, setOriginalLanguage] = useState<'zh' | 'en' | 'fr'>('zh')
+  const [targetLanguage, setTargetLanguage] = useState<'zh' | 'en' | 'fr'>('en')
 
   const handleTranslate = async (text: string) => {
     if (!text.trim()) return
@@ -179,7 +179,7 @@ export default function Home() {
 
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Translate Mixed Chinese/English</CardTitle>
+            <CardTitle>Translate Mixed Languages</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-2 items-center flex-wrap">
@@ -187,12 +187,13 @@ export default function Home() {
                 <label className="text-sm text-muted-foreground">From:</label>
                 <select
                   value={originalLanguage}
-                  onChange={(e) => setOriginalLanguage(e.target.value as 'zh' | 'en')}
+                  onChange={(e) => setOriginalLanguage(e.target.value as 'zh' | 'en' | 'fr')}
                   className="px-3 py-2 border rounded-md bg-background text-sm"
                   disabled={loading}
                 >
-                  <option value="zh">Chinese</option>
+                  <option value="zh">Chinese (Mandarin)</option>
                   <option value="en">English</option>
+                  <option value="fr">French</option>
                 </select>
               </div>
               <span className="text-muted-foreground">→</span>
@@ -200,12 +201,13 @@ export default function Home() {
                 <label className="text-sm text-muted-foreground">To:</label>
                 <select
                   value={targetLanguage}
-                  onChange={(e) => setTargetLanguage(e.target.value as 'zh' | 'en')}
+                  onChange={(e) => setTargetLanguage(e.target.value as 'zh' | 'en' | 'fr')}
                   className="px-3 py-2 border rounded-md bg-background text-sm"
                   disabled={loading}
                 >
-                  <option value="zh">Chinese</option>
+                  <option value="zh">Chinese (Mandarin)</option>
                   <option value="en">English</option>
+                  <option value="fr">French</option>
                 </select>
               </div>
             </div>

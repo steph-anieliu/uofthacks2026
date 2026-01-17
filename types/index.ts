@@ -1,3 +1,9 @@
+export interface TranslationVariant {
+  connotation: string // e.g., "full of joy", "satisfied"
+  translations: string[] // e.g., ["heureux", "heureuse"]
+  partOfSpeech: string // e.g., "adj", "noun", "verb"
+}
+
 export interface Word {
   _id?: string
   word: string
@@ -8,6 +14,9 @@ export interface Word {
   reviewCount: number
   lastReviewed: Date
   mastery: number // 0-100 score
+  // New fields for multiple translations with connotations
+  partOfSpeech?: string // Part of speech of the original word
+  translations?: TranslationVariant[] // Multiple translations with connotations
 }
 
 export interface Query {
@@ -31,15 +40,17 @@ export interface TranslationResponse {
   pinyin: string
 }
 
+export type SupportedLanguage = 'zh' | 'en' | 'fr'
+
 export interface TranslationRequest {
   text: string
-  originalLanguage: 'zh' | 'en'
-  targetLanguage: 'zh' | 'en'
+  originalLanguage: SupportedLanguage
+  targetLanguage: SupportedLanguage
 }
 
 export interface TaggedWord {
   text: string
-  language: 'zh' | 'en' | 'mixed'
+  language: 'zh' | 'en' | 'fr' | 'mixed'
 }
 
 export interface TranscriptionResult {

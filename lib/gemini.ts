@@ -79,70 +79,174 @@ The words array should contain each word or phrase from the transcription with i
 
 export async function translateWithCodeswitching(
   text: string,
-  originalLanguage: 'zh' | 'en' = 'zh',
-  targetLanguage: 'zh' | 'en' = 'en'
+  originalLanguage: 'zh' | 'en' | 'fr' = 'zh',
+  targetLanguage: 'zh' | 'en' | 'fr' = 'en'
 ): Promise<TranslationResponse> {
   // Using gemini-2.5-flash (gemini-2.5-pro not available on free tier)
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
-  const originalLangName = originalLanguage === 'zh' ? 'Chinese' : 'English'
-  const targetLangName = targetLanguage === 'zh' ? 'Chinese' : 'English'
-  const preserveLangName = originalLanguage === 'zh' ? 'Chinese' : 'English'
-  const translateLangName = originalLanguage === 'zh' ? 'English' : 'Chinese'
+  const langNames: Record<string, string> = {
+    zh: 'Chinese (Mandarin)',
+    en: 'English',
+    fr: 'French'
+  }
 
-  const prompt = originalLanguage === 'en' && targetLanguage === 'zh'
-    ? `Given this English text (may contain some Chinese): "${text}"
+  const originalLangName = langNames[originalLanguage] || 'Chinese (Mandarin)'
+  const targetLangName = langNames[targetLanguage] || 'English'
+  const isTargetChinese = targetLanguage === 'zh'
+  const isOriginalChinese = originalLanguage === 'zh'
+
+  // Template for Pattern A: Non-Chinese → Chinese (extract Chinese translations with pinyin)
+  const translateToChineseTemplate = (sourceLang: string) => `Given this ${sourceLang} text (may contain some Chinese): "${text}"
 
 Your task:
-1. Identify each English word/phrase that needs to be translated to Chinese
-2. Translate each English word/phrase to Chinese, keeping any Chinese words unchanged
+1. Identify each ${sourceLang} word/phrase that needs to be translated to Chinese
+2. Translate each ${sourceLang} word/phrase to Chinese, keeping any Chinese words unchanged
 3. Create a natural Chinese translation that combines everything
-4. For each English word that was translated to Chinese, extract the translation with:
-   - The Chinese characters (translation)
-   - Pinyin with tone marks
-   - The original English word
-   - A brief context/explanation of usage
+4. For each ${sourceLang} word that was translated to Chinese, extract the translation with:
+   - The original ${sourceLang} word
+   - Its part of speech (adj, noun, verb, etc.)
+   - If the word can be translated in multiple ways with different connotations, provide ALL Chinese translations grouped by connotation
+   - For each connotation, provide: the connotation description, the Chinese translation(s) with pinyin, and the part of speech
 
 Return a JSON object in this exact format:
 {
   "translated": "the full Chinese translation",
   "words": [
     {
-      "word": "Chinese characters (the translation)",
+      "word": "primary Chinese translation (characters)",
       "pinyin": "pinyin with tone marks",
-      "english": "original English word that was translated",
-      "explanation": "brief context or usage explanation"
+      "english": "original ${sourceLang} word that was translated",
+      "explanation": "brief context or usage explanation",
+      "partOfSpeech": "adj",
+      "translations": [
+        {
+          "connotation": "connotation description",
+          "translations": ["Chinese translation 1", "Chinese translation 2"],
+          "partOfSpeech": "adj"
+        }
+      ]
     }
   ],
   "pinyin": "pinyin for the entire translated sentence"
 }
 
-Only include translated Chinese words (that came from English) in the words array. Do not include words that were already in Chinese.
+IMPORTANT: For Chinese translations in the translations array, provide the Chinese characters. The pinyin for each translation variant should be included if available, but the main pinyin field contains the pinyin for the primary translation. If a word has only ONE translation, still include it in the translations array with a single entry.
+Only include translated Chinese words (that came from ${sourceLang}) in the words array. Do not include words that were already in Chinese.
 Return ONLY valid JSON, no additional text.`
-    : `Given this mixed ${originalLangName}-${translateLangName} text: "${text}"
+
+  // Template for Pattern B: Chinese → Non-Chinese (extract original Chinese words)
+  const translateFromChineseTemplate = (targetLang: string) => `Given this Chinese text (may contain some ${targetLang}): "${text}"
 
 Your task:
-1. Identify each word/phrase and determine if it's ${preserveLangName} or ${translateLangName}
-2. For ${translateLangName} words/phrases ONLY, translate them to ${targetLangName}. Leave ${preserveLangName} words/phrases unchanged.
-3. For ${preserveLangName} words, provide pinyin (if ${preserveLangName} is Chinese) and ${translateLangName} meaning
-4. Create a natural ${targetLangName} translation that combines everything - translate ${translateLangName} parts to ${targetLangName}, keep ${preserveLangName} parts as-is
-5. Extract all ${preserveLangName} words with their pinyin (if applicable) and ${translateLangName} translation, and a brief explanation
+1. Identify each Chinese word/phrase that needs to be translated to ${targetLang}
+2. Translate each Chinese word/phrase to ${targetLang}, keeping any ${targetLang} words unchanged
+3. Create a natural ${targetLang} translation that combines everything
+4. Extract all Chinese words with:
+   - The Chinese characters
+   - Pinyin with tone marks
+   - Part of speech
+   - If the word can be translated in multiple ways with different connotations, provide ALL translations grouped by connotation
+   - For each connotation, provide: the connotation description, the ${targetLang} translation(s), and the part of speech
 
 Return a JSON object in this exact format:
 {
-  "translated": "the full ${targetLangName} translation (with ${translateLangName} words translated, ${preserveLangName} words unchanged)",
+  "translated": "the full ${targetLang} translation",
   "words": [
     {
-      "word": "${preserveLangName} word or phrase",
-      "pinyin": "${originalLanguage === 'zh' ? 'pinyin with tone marks' : 'N/A'}",
-      "english": "${originalLanguage === 'zh' ? 'English translation' : 'same as word'}",
+      "word": "Chinese characters",
+      "pinyin": "pinyin with tone marks",
+      "english": "primary ${targetLang} translation",
+      "explanation": "brief context or usage explanation",
+      "partOfSpeech": "noun",
+      "translations": [
+        {
+          "connotation": "connotation description",
+          "translations": ["translation1", "translation2"],
+          "partOfSpeech": "noun"
+        }
+      ]
+    }
+  ],
+  "pinyin": "pinyin for the entire translated sentence"
+}
+
+IMPORTANT: If a word has only ONE translation, still include it in the translations array with a single entry. If a word has MULTIPLE translations with different connotations, include ALL of them.
+Only include Chinese words in the words array. Do not include ${targetLang} words that were translated from Chinese.
+Return ONLY valid JSON, no additional text.`
+
+  // Template for Pattern C: Non-Chinese → Non-Chinese (extract translated words, no pinyin)
+  const translateBetweenNonChineseTemplate = (sourceLang: string, targetLang: string) => `Given this ${sourceLang} text (may contain some ${targetLang}): "${text}"
+
+Your task:
+1. Identify each ${sourceLang} word/phrase that needs to be translated to ${targetLang}
+2. Translate each ${sourceLang} word/phrase to ${targetLang}, keeping any ${targetLang} words unchanged
+3. Create a natural ${targetLang} translation that combines everything
+4. For each ${sourceLang} word that was translated to ${targetLang}, extract it with:
+   - The original ${sourceLang} word
+   - Its part of speech (adj, noun, verb, etc.)
+   - If the word can be translated in multiple ways with different connotations, provide ALL translations grouped by connotation
+   - For each connotation, provide: the connotation description, the ${targetLang} translation(s), and the part of speech
+
+Return a JSON object in this exact format:
+{
+  "translated": "the full ${targetLang} translation",
+  "words": [
+    {
+      "word": "original ${sourceLang} word",
+      "pinyin": "N/A",
+      "english": "original ${sourceLang} word (same as word field)",
+      "explanation": "brief context or usage explanation",
+      "partOfSpeech": "adj",
+      "translations": [
+        {
+          "connotation": "connotation description (e.g., 'full of joy', 'satisfied')",
+          "translations": ["translation1", "translation2"],
+          "partOfSpeech": "adj"
+        }
+      ]
+    }
+  ],
+  "pinyin": "N/A"
+}
+
+IMPORTANT: If a word has only ONE translation, still include it in the translations array with a single entry. If a word has MULTIPLE translations with different connotations, include ALL of them. For example, "happy" might have:
+- translations: [{"connotation": "full of joy", "translations": ["heureux", "heureuse"], "partOfSpeech": "adj"}, {"connotation": "satisfied", "translations": ["content", "contente"], "partOfSpeech": "adj"}]
+
+Only include translated ${targetLang} words (that came from ${sourceLang}) in the words array. Do not include words that were already in ${targetLang}.
+Return ONLY valid JSON, no additional text.`
+
+  // Determine which pattern to use and generate the prompt
+  const prompt = isTargetChinese && !isOriginalChinese
+    ? translateToChineseTemplate(originalLangName)
+    : isOriginalChinese && !isTargetChinese
+    ? translateFromChineseTemplate(targetLangName)
+    : !isOriginalChinese && !isTargetChinese
+    ? translateBetweenNonChineseTemplate(originalLangName, targetLangName)
+    : `Given this mixed ${originalLangName}-${targetLangName} text: "${text}"
+
+Your task:
+1. Identify each word/phrase and determine if it's ${originalLangName} or ${targetLangName}
+2. For ${targetLangName} words/phrases ONLY, translate them to ${originalLangName}. Leave ${originalLangName} words/phrases unchanged.
+3. For ${originalLangName} words, provide pinyin (if ${originalLangName} is Chinese) and ${targetLangName} meaning
+4. Create a natural ${originalLangName} translation that combines everything - translate ${targetLangName} parts to ${originalLangName}, keep ${originalLangName} parts as-is
+5. Extract all ${originalLangName} words with their pinyin (if applicable) and ${targetLangName} translation, and a brief explanation
+
+Return a JSON object in this exact format:
+{
+  "translated": "the full ${originalLangName} translation (with ${targetLangName} words translated, ${originalLangName} words unchanged)",
+  "words": [
+    {
+      "word": "${originalLangName} word or phrase",
+      "pinyin": "${isOriginalChinese ? 'pinyin with tone marks' : 'N/A'}",
+      "english": "${isOriginalChinese ? targetLangName + ' translation' : 'same as word'}",
       "explanation": "brief context or usage explanation"
     }
   ],
-  "pinyin": "${originalLanguage === 'zh' ? 'pinyin for the entire translated sentence' : 'N/A'}"
+  "pinyin": "${isOriginalChinese ? 'pinyin for the entire translated sentence' : 'N/A'}"
 }
 
-Only include ${preserveLangName} words in the words array. Do not include ${translateLangName} words that were translated.
+Only include ${originalLangName} words in the words array. Do not include ${targetLangName} words that were translated.
 Return ONLY valid JSON, no additional text.`
 
   try {
@@ -164,8 +268,8 @@ Return ONLY valid JSON, no additional text.`
       mastery: 0,
     }))
     
-    // If original language is English, pinyin should be empty string or not included
-    if (originalLanguage === 'en' && !parsed.pinyin) {
+    // If original language is not Chinese, pinyin should be empty string
+    if (originalLanguage !== 'zh' && !parsed.pinyin) {
       parsed.pinyin = ''
     }
     

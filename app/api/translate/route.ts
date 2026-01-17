@@ -13,9 +13,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!['zh', 'en'].includes(originalLanguage) || !['zh', 'en'].includes(targetLanguage)) {
+    if (!['zh', 'en', 'fr'].includes(originalLanguage) || !['zh', 'en', 'fr'].includes(targetLanguage)) {
       return NextResponse.json(
-        { error: 'originalLanguage and targetLanguage must be "zh" or "en"' },
+        { error: 'originalLanguage and targetLanguage must be "zh", "en", or "fr"' },
         { status: 400 }
       )
     }

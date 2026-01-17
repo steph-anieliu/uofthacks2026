@@ -11,8 +11,8 @@ interface TranslationDisplayProps {
   translation: TranslationResponse | null
   loading?: boolean
   onPlayAudio?: (text: string) => void
-  originalLanguage?: 'zh' | 'en'
-  targetLanguage?: 'zh' | 'en'
+  originalLanguage?: 'zh' | 'en' | 'fr'
+  targetLanguage?: 'zh' | 'en' | 'fr'
 }
 
 export function TranslationDisplay({
@@ -88,45 +88,124 @@ export function TranslationDisplay({
         <Card>
           <CardHeader>
             <CardTitle>
-              {originalLanguage === 'en' && targetLanguage === 'zh' 
+              {(originalLanguage === 'en' || originalLanguage === 'fr') && targetLanguage === 'zh' 
                 ? 'Translated Words' 
                 : 'Words Learned'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {translation.words.map((word, index) => (
-                <div
-                  key={index}
-                  className="flex items-start justify-between p-3 border rounded-lg"
-                >
-                  <div className="flex-1">
-                    {originalLanguage === 'en' && targetLanguage === 'zh' ? (
-                      <>
-                        <div className="text-sm text-muted-foreground mb-1">{word.english}</div>
-                        <div className="font-semibold text-lg">{word.word}</div>
-                        <div className="text-sm text-muted-foreground">{word.pinyin}</div>
-                        {word.explanation && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {word.explanation}
+              {translation.words.map((word, index) => {
+                const hasMultipleTranslations = word.translations && word.translations.length > 0
+                
+                return (
+                  <div
+                    key={index}
+                    className="flex items-start justify-between p-3 border rounded-lg"
+                  >
+                    <div className="flex-1">
+                      {(originalLanguage === 'en' || originalLanguage === 'fr') && targetLanguage === 'zh' ? (
+                        // Non-Chinese → Chinese
+                        hasMultipleTranslations ? (
+                          <div className="space-y-2">
+                            <div className="font-semibold text-lg">
+                              {word.english}
+                              {word.partOfSpeech && (
+                                <span className="text-sm font-normal text-muted-foreground ml-1">
+                                  ({word.partOfSpeech})
+                                </span>
+                              )}
+                            </div>
+                            {word.translations?.map((variant, vIndex) => (
+                              <div key={vIndex} className="text-sm ml-2">
+                                <span className="text-muted-foreground">
+                                  {variant.connotation}
+                                </span>
+                                {' → '}
+                                <span className="font-medium">
+                                  {variant.translations.join(', ')}
+                                </span>
+                                {variant.partOfSpeech && (
+                                  <span className="text-muted-foreground ml-1">
+                                    ({variant.partOfSpeech})
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            {word.explanation && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {word.explanation}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <div className="font-semibold text-lg">{word.word}</div>
-                        <div className="text-sm text-muted-foreground">{word.pinyin}</div>
-                        <div className="text-sm">{word.english}</div>
-                        {word.explanation && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {word.explanation}
+                        ) : (
+                          <>
+                            <div className="text-sm text-muted-foreground mb-1">{word.english}</div>
+                            <div className="font-semibold text-lg">{word.word}</div>
+                            <div className="text-sm text-muted-foreground">{word.pinyin}</div>
+                            {word.explanation && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {word.explanation}
+                              </div>
+                            )}
+                          </>
+                        )
+                      ) : (
+                        // Chinese → Non-Chinese or other combinations
+                        hasMultipleTranslations ? (
+                          <div className="space-y-2">
+                            <div className="font-semibold text-lg">
+                              {word.word}
+                              {word.partOfSpeech && (
+                                <span className="text-sm font-normal text-muted-foreground ml-1">
+                                  ({word.partOfSpeech})
+                                </span>
+                              )}
+                            </div>
+                            {word.pinyin && word.pinyin !== 'N/A' && (
+                              <div className="text-sm text-muted-foreground">{word.pinyin}</div>
+                            )}
+                            {word.translations?.map((variant, vIndex) => (
+                              <div key={vIndex} className="text-sm ml-2">
+                                <span className="text-muted-foreground">
+                                  {variant.connotation}
+                                </span>
+                                {' → '}
+                                <span className="font-medium">
+                                  {variant.translations.join(', ')}
+                                </span>
+                                {variant.partOfSpeech && (
+                                  <span className="text-muted-foreground ml-1">
+                                    ({variant.partOfSpeech})
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            {word.explanation && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {word.explanation}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </>
-                    )}
+                        ) : (
+                          <>
+                            <div className="font-semibold text-lg">{word.word}</div>
+                            {word.pinyin && word.pinyin !== 'N/A' && (
+                              <div className="text-sm text-muted-foreground">{word.pinyin}</div>
+                            )}
+                            <div className="text-sm">{word.english}</div>
+                            {word.explanation && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {word.explanation}
+                              </div>
+                            )}
+                          </>
+                        )
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </CardContent>
         </Card>

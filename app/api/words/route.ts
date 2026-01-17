@@ -33,6 +33,9 @@ export async function POST(request: NextRequest) {
       reviewCount: 0,
       lastReviewed: new Date(),
       mastery: 0,
+      // Include new fields if present
+      partOfSpeech: body.partOfSpeech,
+      translations: body.translations,
     }
 
     const db = await getDb()
