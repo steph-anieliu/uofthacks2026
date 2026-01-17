@@ -33,6 +33,8 @@ export interface TranslationResponse {
 
 export interface TranslationRequest {
   text: string
+  originalLanguage: 'zh' | 'en'
+  targetLanguage: 'zh' | 'en'
 }
 
 export interface TaggedWord {

@@ -11,6 +11,8 @@ interface TranslationDisplayProps {
   translation: TranslationResponse | null
   loading?: boolean
   onPlayAudio?: (text: string) => void
+  originalLanguage?: 'zh' | 'en'
+  targetLanguage?: 'zh' | 'en'
 }
 
 export function TranslationDisplay({
@@ -18,6 +20,8 @@ export function TranslationDisplay({
   translation,
   loading = false,
   onPlayAudio,
+  originalLanguage = 'zh',
+  targetLanguage = 'en',
 }: TranslationDisplayProps) {
   const [playing, setPlaying] = useState(false)
 
@@ -83,7 +87,11 @@ export function TranslationDisplay({
       {translation.words && translation.words.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Words Learned</CardTitle>
+            <CardTitle>
+              {originalLanguage === 'en' && targetLanguage === 'zh' 
+                ? 'Translated Words' 
+                : 'Words Learned'}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -93,13 +101,28 @@ export function TranslationDisplay({
                   className="flex items-start justify-between p-3 border rounded-lg"
                 >
                   <div className="flex-1">
-                    <div className="font-semibold text-lg">{word.word}</div>
-                    <div className="text-sm text-muted-foreground">{word.pinyin}</div>
-                    <div className="text-sm">{word.english}</div>
-                    {word.explanation && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {word.explanation}
-                      </div>
+                    {originalLanguage === 'en' && targetLanguage === 'zh' ? (
+                      <>
+                        <div className="text-sm text-muted-foreground mb-1">{word.english}</div>
+                        <div className="font-semibold text-lg">{word.word}</div>
+                        <div className="text-sm text-muted-foreground">{word.pinyin}</div>
+                        {word.explanation && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {word.explanation}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-semibold text-lg">{word.word}</div>
+                        <div className="text-sm text-muted-foreground">{word.pinyin}</div>
+                        <div className="text-sm">{word.english}</div>
+                        {word.explanation && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {word.explanation}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

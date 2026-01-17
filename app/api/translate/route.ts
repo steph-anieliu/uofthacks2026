@@ -4,7 +4,7 @@ import { translateWithCodeswitching } from '@/lib/gemini'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { text } = body
+    const { text, originalLanguage = 'zh', targetLanguage = 'en' } = body
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json(
@@ -13,7 +13,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await translateWithCodeswitching(text)
+    if (!['zh', 'en'].includes(originalLanguage) || !['zh', 'en'].includes(targetLanguage)) {
+      return NextResponse.json(
+        { error: 'originalLanguage and targetLanguage must be "zh" or "en"' },
+        { status: 400 }
+      )
+    }
+
+    const result = await translateWithCodeswitching(text, originalLanguage, targetLanguage)
     
     return NextResponse.json(result)
   } catch (error) {

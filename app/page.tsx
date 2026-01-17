@@ -16,6 +16,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [originalLanguage, setOriginalLanguage] = useState<'zh' | 'en'>('zh')
+  const [targetLanguage, setTargetLanguage] = useState<'zh' | 'en'>('en')
 
   const handleTranslate = async (text: string) => {
     if (!text.trim()) return
@@ -27,7 +29,7 @@ export default function Home() {
       const response = await fetch('/api/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, originalLanguage, targetLanguage }),
       })
 
       if (!response.ok) {
@@ -180,6 +182,33 @@ export default function Home() {
             <CardTitle>Translate Mixed Chinese/English</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex gap-2 items-center flex-wrap">
+              <div className="flex gap-2 items-center">
+                <label className="text-sm text-muted-foreground">From:</label>
+                <select
+                  value={originalLanguage}
+                  onChange={(e) => setOriginalLanguage(e.target.value as 'zh' | 'en')}
+                  className="px-3 py-2 border rounded-md bg-background text-sm"
+                  disabled={loading}
+                >
+                  <option value="zh">Chinese</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+              <span className="text-muted-foreground">→</span>
+              <div className="flex gap-2 items-center">
+                <label className="text-sm text-muted-foreground">To:</label>
+                <select
+                  value={targetLanguage}
+                  onChange={(e) => setTargetLanguage(e.target.value as 'zh' | 'en')}
+                  className="px-3 py-2 border rounded-md bg-background text-sm"
+                  disabled={loading}
+                >
+                  <option value="zh">Chinese</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+            </div>
             <div className="flex gap-2">
               <Input
                 type="text"
@@ -221,6 +250,8 @@ export default function Home() {
               translation={translation}
               loading={loading}
               onPlayAudio={handlePlayAudio}
+              originalLanguage={originalLanguage}
+              targetLanguage={targetLanguage}
             />
 
             {translation.words && translation.words.length > 0 && (
