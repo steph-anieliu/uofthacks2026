@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { Word, TranslationResponse, TranscriptionResult } from '@/types'
+import { transcribeSpeech } from '@/lib/elevenlabs'
 
 if (!process.env.GEMINI_API_KEY) {
   throw new Error('Please add your GEMINI_API_KEY to .env.local')
@@ -9,59 +10,37 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 
 export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionResult> {
   try {
-    // Convert Blob to base64
-    const arrayBuffer = await audioBlob.arrayBuffer()
-    
-    // Validate audio size (Gemini has limits)
-    if (arrayBuffer.byteLength === 0) {
+    // Validate audio size
+    if (audioBlob.size === 0) {
       throw new Error('Audio file is empty')
     }
     
-    const base64Audio = Buffer.from(arrayBuffer).toString('base64')
+    // Step 1: Use ElevenLabs for speech-to-text transcription
+    const transcription = await transcribeSpeech(audioBlob)
     
-    // Normalize mime type - Gemini prefers specific formats
-    // If webm, try to use a more compatible type
-    let mimeType = audioBlob.type || 'audio/webm'
-    
-    // Map common webm types to formats Gemini accepts better
-    if (mimeType.includes('webm')) {
-      mimeType = 'audio/webm'
-    } else if (mimeType.includes('mp3')) {
-      mimeType = 'audio/mp3'
-    } else if (mimeType.includes('wav')) {
-      mimeType = 'audio/wav'
-    } else if (mimeType.includes('ogg')) {
-      mimeType = 'audio/ogg'
+    if (!transcription || !transcription.trim()) {
+      throw new Error('Empty transcription received from ElevenLabs')
     }
     
-
-    // Use gemini-pro which is available and working for translation
-    // If audio support is needed, may need to check available models
+    // Step 2: Use Gemini to tag words/phrases by language
     const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
     
-    const prompt = `Transcribe this audio and tag each word/phrase by language (Chinese 'zh' or English 'en'). 
-For mixed words/phrases, use 'mixed'. Tag each word or phrase separately.
+    const prompt = `Given this transcribed text: "${transcription}"
+
+Tag each word/phrase by language (Chinese 'zh' or English 'en'). For mixed words/phrases, use 'mixed'. Tag each word or phrase separately.
 
 Return ONLY a valid JSON object in this exact format (no additional text, no markdown):
 {
-  "transcription": "the full transcription text",
+  "transcription": "${transcription}",
   "words": [
     {"text": "word or phrase", "language": "zh"},
     {"text": "word or phrase", "language": "en"}
   ]
 }
 
-The words array should contain each word or phrase from the transcription with its language tag.`
+The words array should contain each word or phrase from the transcription with its language tag. The transcription field should be the original transcribed text.`
     
-    // Create audio part for Gemini - use FileDataPart format
-    const audioPart = {
-      inlineData: {
-        data: base64Audio,
-        mimeType: mimeType,
-      },
-    }
-    
-    const result = await model.generateContent([prompt, audioPart])
+    const result = await model.generateContent(prompt)
     const response = await result.response
     const text = response.text()
     
@@ -76,6 +55,9 @@ The words array should contain each word or phrase from the transcription with i
     
     const parsed: TranscriptionResult = JSON.parse(cleanedText)
     
+    // Ensure transcription matches what we got from ElevenLabs
+    parsed.transcription = transcription
+    
     // Validate response structure
     if (!parsed.transcription || !Array.isArray(parsed.words)) {
       throw new Error('Invalid response format from Gemini API')
@@ -83,11 +65,11 @@ The words array should contain each word or phrase from the transcription with i
     
     return parsed
   } catch (error) {
-    console.error('Gemini audio transcription error:', error)
+    console.error('Audio transcription error:', error)
     
     // Provide more specific error messages
     if (error instanceof SyntaxError) {
-      throw new Error('Failed to parse transcription response. The API may have returned invalid JSON.')
+      throw new Error('Failed to parse language tagging response. The API may have returned invalid JSON.')
     }
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'

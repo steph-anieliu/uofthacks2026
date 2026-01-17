@@ -32,6 +32,47 @@ export async function synthesizeSpeech(text: string, voiceId: string = '21m00Tcm
   }
 }
 
+// Transcribe audio using ElevenLabs Speech-to-Text
+export async function transcribeSpeech(audioBlob: Blob): Promise<string> {
+  try {
+    // Convert Blob to Buffer
+    const arrayBuffer = await audioBlob.arrayBuffer()
+    const audioBuffer = Buffer.from(arrayBuffer)
+    
+    // Create form data using global FormData (available in Node.js 18+)
+    const formData = new FormData()
+    const blob = new Blob([audioBuffer], { type: audioBlob.type || 'audio/webm' })
+    formData.append('audio', blob, 'recording.webm')
+    
+    // ElevenLabs STT API endpoint
+    const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+      method: 'POST',
+      headers: {
+        'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      let errorData
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        errorData = { error: { message: errorText } }
+      }
+      throw new Error(errorData.error?.message || `ElevenLabs API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    return data.text || ''
+  } catch (error) {
+    console.error('ElevenLabs transcription error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    throw new Error(`Failed to transcribe audio with ElevenLabs: ${errorMessage}`)
+  }
+}
+
 // Get available voices (optional helper function)
 export async function getVoices() {
   try {
