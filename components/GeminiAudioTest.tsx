@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Mic, MicOff, Loader2 } from 'lucide-react'
 import { TranscriptionResult } from '@/types'
 
-export function GeminiAudioTest() {
+export function ElevenLabsTranscriptionTest() {
   const [isRecording, setIsRecording] = useState(false)
   const [result, setResult] = useState<TranscriptionResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -124,7 +124,7 @@ export function GeminiAudioTest() {
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
-        <CardTitle>Gemini Audio Transcription with Language Tagging</CardTitle>
+        <CardTitle>ElevenLabs Transcription with Language Tagging</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex gap-4">
@@ -199,8 +199,8 @@ export function GeminiAudioTest() {
         )}
 
         <div className="text-sm text-muted-foreground">
-          <p>Click "Start Recording" to record audio and test Gemini transcription with language tagging.</p>
-          <p>The audio will be processed by Gemini API when you stop recording.</p>
+          <p>Click "Start Recording" to record audio and test ElevenLabs transcription with language tagging.</p>
+          <p>Audio is transcribed with ElevenLabs, then language tags are added by Gemini when you stop recording.</p>
         </div>
       </CardContent>
     </Card>
