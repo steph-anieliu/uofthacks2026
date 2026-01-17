@@ -34,3 +34,13 @@ export interface TranslationResponse {
 export interface TranslationRequest {
   text: string
 }
+
+export interface TaggedWord {
+  text: string
+  language: 'zh' | 'en' | 'mixed'
+}
+
+export interface TranscriptionResult {
+  transcription: string
+  words: TaggedWord[]
+}

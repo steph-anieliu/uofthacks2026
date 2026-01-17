@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { Word, TranslationResponse } from '@/types'
+import { Word, TranslationResponse, TranscriptionResult } from '@/types'
 
 if (!process.env.GEMINI_API_KEY) {
   throw new Error('Please add your GEMINI_API_KEY to .env.local')
@@ -7,11 +7,54 @@ if (!process.env.GEMINI_API_KEY) {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 
-export async function transcribeAudio(audioBlob: Blob): Promise<string> {
-  // Note: Gemini API doesn't directly support audio transcription
-  // We'll use Web Speech API on the client side instead
-  // This function is kept for potential future use with other services
-  throw new Error('Audio transcription should be handled on the client side using Web Speech API')
+export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionResult> {
+  try {
+    // Convert Blob to base64
+    const arrayBuffer = await audioBlob.arrayBuffer()
+    const base64Audio = Buffer.from(arrayBuffer).toString('base64')
+    
+    // Get mime type from blob, default to webm
+    const mimeType = audioBlob.type || 'audio/webm'
+    
+    // Use Gemini 1.5 Pro which supports audio input
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
+    
+    const prompt = `Transcribe this audio and tag each word/phrase by language (Chinese 'zh' or English 'en'). 
+For mixed words/phrases, use 'mixed'. Tag each word or phrase separately.
+
+Return ONLY a valid JSON object in this exact format (no additional text, no markdown):
+{
+  "transcription": "the full transcription text",
+  "words": [
+    {"text": "word or phrase", "language": "zh"},
+    {"text": "word or phrase", "language": "en"}
+  ]
+}
+
+The words array should contain each word or phrase from the transcription with its language tag.`
+    
+    // Create audio part for Gemini
+    const audioPart = {
+      inlineData: {
+        data: base64Audio,
+        mimeType: mimeType,
+      },
+    }
+    
+    const result = await model.generateContent([prompt, audioPart])
+    const response = await result.response
+    const text = response.text()
+    
+    // Clean the response - remove markdown code blocks if present
+    const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    
+    const parsed: TranscriptionResult = JSON.parse(cleanedText)
+    
+    return parsed
+  } catch (error) {
+    console.error('Gemini audio transcription error:', error)
+    throw new Error('Failed to transcribe audio. Please try again.')
+  }
 }
 
 export async function translateWithCodeswitching(text: string): Promise<TranslationResponse> {

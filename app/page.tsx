@@ -84,40 +84,77 @@ export default function Home() {
     setSaving(true)
 
     try {
-      // Save each word
-      const savePromises = translation.words.map((word) =>
-        fetch('/api/words', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(word),
+      // Save each word and track successful saves
+      const saveResults = await Promise.allSettled(
+        translation.words.map(async (word) => {
+          const response = await fetch('/api/words', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(word),
+          })
+
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+            throw new Error(error.error || `Failed to save word: ${word.word}`)
+          }
+
+          return { word, response: await response.json() }
         })
       )
 
-      await Promise.all(savePromises)
+      // Filter successful saves
+      const successfulSaves = saveResults
+        .filter((result): result is PromiseFulfilledResult<{ word: Word; response: any }> => 
+          result.status === 'fulfilled'
+        )
+        .map((result) => result.value)
 
-      // Save query
-      await fetch('/api/queries', {
+      const failedSaves = saveResults
+        .filter((result): result is PromiseRejectedResult => 
+          result.status === 'rejected'
+        )
+
+      // Only proceed if at least one word was saved
+      if (successfulSaves.length === 0) {
+        const errorMessages = failedSaves
+          .map((result) => result.reason?.message || 'Unknown error')
+          .join('\n')
+        alert(`Failed to save all words:\n${errorMessages}`)
+        return
+      }
+
+      // Save query only with successfully saved words
+      const queryResponse = await fetch('/api/queries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           original: inputText,
           translated: translation.translated,
-          words: translation.words.map((w) => w.word),
+          words: successfulSaves.map((s) => s.word.word),
         }),
       })
 
-      // Update progress in localStorage
+      if (!queryResponse.ok) {
+        throw new Error('Failed to save query')
+      }
+
+      // Update progress in localStorage with actual saved count
       if (typeof window !== 'undefined') {
         const { updateStreak, incrementWordsLearned, incrementQueries } = await import('@/lib/storage')
         updateStreak()
-        incrementWordsLearned(translation.words.length)
+        incrementWordsLearned(successfulSaves.length)
         incrementQueries()
       }
 
-      alert(`Saved ${translation.words.length} word(s)!`)
+      // Show appropriate message based on results
+      if (failedSaves.length > 0) {
+        alert(`Saved ${successfulSaves.length} of ${translation.words.length} word(s). Some words failed to save.`)
+      } else {
+        alert(`Saved ${successfulSaves.length} word(s)!`)
+      }
     } catch (error) {
       console.error('Save error:', error)
-      alert('Failed to save words. Please try again.')
+      alert(`Failed to save words: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setSaving(false)
     }
