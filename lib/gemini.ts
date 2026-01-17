@@ -34,8 +34,10 @@ export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionRes
       mimeType = 'audio/ogg'
     }
     
-    // Use Gemini 1.5 Pro which supports audio input
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
+
+    // Use gemini-pro which is available and working for translation
+    // If audio support is needed, may need to check available models
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
     
     const prompt = `Transcribe this audio and tag each word/phrase by language (Chinese 'zh' or English 'en'). 
 For mixed words/phrases, use 'mixed'. Tag each word or phrase separately.
