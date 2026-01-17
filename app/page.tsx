@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AudioInput } from '@/components/AudioInput'
 import { TranslationDisplay } from '@/components/TranslationDisplay'
+import { GeminiAudioTest } from '@/components/GeminiAudioTest'
 import { TranslationResponse, Word } from '@/types'
 import { Save, Loader2 } from 'lucide-react'
 import Link from 'next/link'
@@ -246,6 +247,10 @@ export default function Home() {
             )}
           </>
         )}
+
+        <div className="mt-8">
+          <GeminiAudioTest />
+        </div>
       </div>
     </div>
   )

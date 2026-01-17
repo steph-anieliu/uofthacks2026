@@ -30,8 +30,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result)
   } catch (error) {
     console.error('Transcription error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to transcribe audio'
+    console.error('Error details:', {
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to transcribe audio' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

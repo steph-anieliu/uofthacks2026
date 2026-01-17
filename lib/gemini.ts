@@ -11,10 +11,28 @@ export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionRes
   try {
     // Convert Blob to base64
     const arrayBuffer = await audioBlob.arrayBuffer()
+    
+    // Validate audio size (Gemini has limits)
+    if (arrayBuffer.byteLength === 0) {
+      throw new Error('Audio file is empty')
+    }
+    
     const base64Audio = Buffer.from(arrayBuffer).toString('base64')
     
-    // Get mime type from blob, default to webm
-    const mimeType = audioBlob.type || 'audio/webm'
+    // Normalize mime type - Gemini prefers specific formats
+    // If webm, try to use a more compatible type
+    let mimeType = audioBlob.type || 'audio/webm'
+    
+    // Map common webm types to formats Gemini accepts better
+    if (mimeType.includes('webm')) {
+      mimeType = 'audio/webm'
+    } else if (mimeType.includes('mp3')) {
+      mimeType = 'audio/mp3'
+    } else if (mimeType.includes('wav')) {
+      mimeType = 'audio/wav'
+    } else if (mimeType.includes('ogg')) {
+      mimeType = 'audio/ogg'
+    }
     
     // Use Gemini 1.5 Pro which supports audio input
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
@@ -33,7 +51,7 @@ Return ONLY a valid JSON object in this exact format (no additional text, no mar
 
 The words array should contain each word or phrase from the transcription with its language tag.`
     
-    // Create audio part for Gemini
+    // Create audio part for Gemini - use FileDataPart format
     const audioPart = {
       inlineData: {
         data: base64Audio,
@@ -46,14 +64,32 @@ The words array should contain each word or phrase from the transcription with i
     const text = response.text()
     
     // Clean the response - remove markdown code blocks if present
-    const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    let cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    
+    // Try to extract JSON if wrapped in other text
+    const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      cleanedText = jsonMatch[0]
+    }
     
     const parsed: TranscriptionResult = JSON.parse(cleanedText)
+    
+    // Validate response structure
+    if (!parsed.transcription || !Array.isArray(parsed.words)) {
+      throw new Error('Invalid response format from Gemini API')
+    }
     
     return parsed
   } catch (error) {
     console.error('Gemini audio transcription error:', error)
-    throw new Error('Failed to transcribe audio. Please try again.')
+    
+    // Provide more specific error messages
+    if (error instanceof SyntaxError) {
+      throw new Error('Failed to parse transcription response. The API may have returned invalid JSON.')
+    }
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    throw new Error(`Failed to transcribe audio: ${errorMessage}`)
   }
 }
 
