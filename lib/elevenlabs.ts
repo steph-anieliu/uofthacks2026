@@ -44,8 +44,8 @@ export async function transcribeSpeech(audioBlob: Blob): Promise<string> {
     // Create FormData with proper field names required by ElevenLabs API
     const formData = new FormDataPackage()
     
-    // Required: model_id (use scribe_v1 for speech-to-text)
-    formData.append('model_id', 'scribe_v1')
+    // Required: model_id (use scribe_v2 for speech-to-text)
+    formData.append('model_id', 'scribe_v2')
     
     // Required: file (must be named 'file', not 'audio')
     // Use Buffer directly with form-data package
@@ -66,8 +66,14 @@ export async function transcribeSpeech(audioBlob: Blob): Promise<string> {
       const chunks: Buffer[] = []
       
       // Read chunks directly from formData stream
-      formData.on('data', (chunk: Buffer) => {
-        chunks.push(chunk)
+      // form-data may emit strings or buffers, so we need to handle both
+      formData.on('data', (chunk: Buffer | string) => {
+        // Convert string chunks to Buffer if needed
+        if (typeof chunk === 'string') {
+          chunks.push(Buffer.from(chunk))
+        } else {
+          chunks.push(chunk)
+        }
       })
       formData.on('end', () => {
         resolve(Buffer.concat(chunks))
@@ -99,8 +105,17 @@ export async function transcribeSpeech(audioBlob: Blob): Promise<string> {
     }
 
     const data = await response.json()
-    // ElevenLabs returns text in 'text' field
-    return data.text || ''
+    // ElevenLabs returns response with message_type and text fields
+    // Extract text from the response structure
+    if (data.text) {
+      console.log('ElevenLabs transcription result:', data.text)
+      return data.text
+    }
+    // Fallback: if response structure is different, try other possible fields
+    if (data.transcription) {
+      return data.transcription
+    }
+    throw new Error('ElevenLabs response does not contain text or transcription field')
   } catch (error) {
     console.error('ElevenLabs transcription error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'

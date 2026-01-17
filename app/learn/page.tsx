@@ -37,6 +37,15 @@ export default function LearnPage() {
     }
   }, [searchQuery, words])
 
+  // Ensure currentIndex is always valid when filteredWords changes
+  useEffect(() => {
+    if (filteredWords.length === 0) {
+      setCurrentIndex(0)
+    } else if (currentIndex >= filteredWords.length) {
+      setCurrentIndex(Math.max(0, filteredWords.length - 1))
+    }
+  }, [filteredWords, currentIndex])
+
   const fetchWords = async () => {
     try {
       const response = await fetch('/api/words')
@@ -61,9 +70,22 @@ export default function LearnPage() {
       })
 
       if (response.ok) {
-        setWords(words.filter((w) => w._id !== id))
-        if (currentIndex >= filteredWords.length - 1) {
-          setCurrentIndex(Math.max(0, currentIndex - 1))
+        const updatedWords = words.filter((w) => w._id !== id)
+        setWords(updatedWords)
+        
+        // Find the index of the deleted word in filteredWords
+        const deletedIndex = filteredWords.findIndex((w) => w._id === id)
+        
+        // Adjust currentIndex based on the deletion
+        if (deletedIndex !== -1) {
+          if (filteredWords.length === 1) {
+            // Deleting the last/only item, reset to 0
+            setCurrentIndex(0)
+          } else if (currentIndex >= deletedIndex) {
+            // If we're at or after the deleted index, move back
+            setCurrentIndex(Math.max(0, currentIndex - 1))
+          }
+          // If currentIndex < deletedIndex, no change needed
         }
       }
     } catch (error) {
@@ -111,7 +133,7 @@ export default function LearnPage() {
                   </div>
                 </CardContent>
               </Card>
-            ) : (
+            ) : currentWord ? (
               <div className="max-w-2xl mx-auto">
                 <div className="mb-4 text-center text-sm text-muted-foreground">
                   Card {currentIndex + 1} of {filteredWords.length}
@@ -130,6 +152,14 @@ export default function LearnPage() {
                   hasPrevious={currentIndex > 0}
                 />
               </div>
+            ) : (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center text-muted-foreground">
+                    No word available at this index.
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </TabsContent>
 

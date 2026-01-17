@@ -23,7 +23,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionRes
     }
     
     // Step 2: Use Gemini to tag words/phrases by language
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
     
     const prompt = `Given this transcribed text: "${transcription}"
 
@@ -78,7 +78,8 @@ The words array should contain each word or phrase from the transcription with i
 }
 
 export async function translateWithCodeswitching(text: string): Promise<TranslationResponse> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
+  // Using gemini-2.5-flash (gemini-2.5-pro not available on free tier)
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const prompt = `Given this mixed Chinese-English text: "${text}"
 
@@ -127,6 +128,7 @@ Return ONLY valid JSON, no additional text.`
     
     return parsed
   } catch (error) {
+    
     console.error('Gemini API error:', error)
     throw new Error('Failed to translate text. Please try again.')
   }
