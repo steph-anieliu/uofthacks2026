@@ -38,6 +38,7 @@ export interface TranslationResponse {
   translated: string
   words: Word[]
   pinyin: string
+  enhanced?: boolean // Indicates if detailed connotations are included
 }
 
 export type SupportedLanguage = 'zh' | 'en' | 'fr'
