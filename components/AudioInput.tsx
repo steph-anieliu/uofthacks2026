@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import { Mic, MicOff } from 'lucide-react'
+import { Mic, MicOff, Loader2 } from 'lucide-react'
 
 interface AudioInputProps {
   onTranscript: (text: string) => void
@@ -11,69 +11,93 @@ interface AudioInputProps {
 
 export function AudioInput({ onTranscript, disabled = false }: AudioInputProps) {
   const [isListening, setIsListening] = useState(false)
-  const [isSupported, setIsSupported] = useState(false)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
 
-  useEffect(() => {
-    // Check if browser supports Web Speech API
-    const SpeechRecognitionClass = 
-      (typeof window !== 'undefined' && window.SpeechRecognition) || 
-      (typeof window !== 'undefined' && (window as any).webkitSpeechRecognition)
-    
-    if (SpeechRecognitionClass) {
-      setIsSupported(true)
-      const recognition = new SpeechRecognitionClass()
-      recognition.continuous = false
-      recognition.interimResults = false
-      recognition.lang = 'zh-CN,en-US' // Support both Chinese and English
+  const startRecording = async () => {
+    try {
+      // Get user media stream
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
 
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        const transcript = event.results[0][0].transcript
-        onTranscript(transcript)
-        setIsListening(false)
+      // Create MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      })
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
       }
 
-      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.error('Speech recognition error:', event.error)
-        setIsListening(false)
+      mediaRecorder.onstop = async () => {
+        setIsProcessing(true)
+        
+        try {
+          // Create blob from recorded chunks
+          const audioBlob = new Blob(audioChunksRef.current, { 
+            type: mediaRecorder.mimeType || 'audio/webm' 
+          })
+
+          // Send to transcription API
+          const formData = new FormData()
+          formData.append('audio', audioBlob, 'recording.webm')
+
+          const response = await fetch('/api/transcribe', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!response.ok) {
+            throw new Error('Transcription failed')
+          }
+
+          const result = await response.json()
+          
+          // Call callback with transcription
+          if (result.transcription) {
+            onTranscript(result.transcription)
+          }
+        } catch (error) {
+          console.error('Error processing audio:', error)
+          alert('Failed to transcribe audio. Please try again.')
+        } finally {
+          setIsProcessing(false)
+          
+          // Stop all tracks in the stream
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop())
+            streamRef.current = null
+          }
+        }
       }
 
-      recognition.onend = () => {
-        setIsListening(false)
-      }
-
-      recognitionRef.current = recognition
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop()
-      }
-    }
-  }, [onTranscript])
-
-  const toggleListening = () => {
-    if (!recognitionRef.current) return
-
-    if (isListening) {
-      recognitionRef.current.stop()
-      setIsListening(false)
-    } else {
-      try {
-        recognitionRef.current.start()
-        setIsListening(true)
-      } catch (error) {
-        console.error('Error starting speech recognition:', error)
-      }
+      mediaRecorder.start()
+      setIsListening(true)
+    } catch (error) {
+      console.error('Error starting audio recording:', error)
+      alert('Failed to access microphone. Please check permissions.')
     }
   }
 
-  if (!isSupported) {
-    return (
-      <div className="text-sm text-muted-foreground">
-        Speech recognition is not supported in your browser. Please use Chrome or Edge.
-      </div>
-    )
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+      setIsListening(false)
+    }
+  }
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopRecording()
+    } else {
+      startRecording()
+    }
   }
 
   return (
@@ -82,10 +106,15 @@ export function AudioInput({ onTranscript, disabled = false }: AudioInputProps) 
       variant={isListening ? 'destructive' : 'default'}
       size="lg"
       onClick={toggleListening}
-      disabled={disabled}
+      disabled={disabled || isProcessing}
       className="gap-2"
     >
-      {isListening ? (
+      {isProcessing ? (
+        <>
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Processing...
+        </>
+      ) : isListening ? (
         <>
           <MicOff className="h-5 w-5" />
           Stop Recording

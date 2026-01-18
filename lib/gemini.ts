@@ -1,6 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { Word, TranslationResponse, TranscriptionResult } from '@/types'
-import { transcribeSpeech } from '@/lib/elevenlabs'
 
 if (!process.env.GEMINI_API_KEY) {
   throw new Error('Please add your GEMINI_API_KEY to .env.local')
@@ -15,48 +14,91 @@ export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionRes
       throw new Error('Audio file is empty')
     }
     
-    // Step 1: Use ElevenLabs for speech-to-text transcription
-    const transcription = await transcribeSpeech(audioBlob)
+    // Convert Blob to Buffer for Gemini API
+    const arrayBuffer = await audioBlob.arrayBuffer()
+    const audioBuffer = Buffer.from(arrayBuffer)
     
-    if (!transcription || !transcription.trim()) {
-      throw new Error('Empty transcription received from ElevenLabs')
+    // Determine file MIME type (Gemini supports audio/webm, audio/mp3, audio/wav, etc.)
+    const mimeType = audioBlob.type || 'audio/webm'
+    
+    // Use Gemini 2.5 Flash with audio input + reasoning
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-2.5-flash',
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'object',
+          properties: {
+            transcription: {
+              type: 'string',
+              description: 'The complete transcribed text from the audio'
+            },
+            words: {
+              type: 'array',
+              description: 'Array of words/phrases with language tags',
+              items: {
+                type: 'object',
+                properties: {
+                  text: {
+                    type: 'string',
+                    description: 'The word or phrase'
+                  },
+                  language: {
+                    type: 'string',
+                    enum: ['zh', 'en', 'fr', 'mixed'],
+                    description: 'Language tag: zh (Chinese), en (English), fr (French), or mixed'
+                  }
+                },
+                required: ['text', 'language']
+              }
+            }
+          },
+          required: ['transcription', 'words']
+        }
+      }
+    })
+    
+    // Upload the audio file to Gemini
+    const fileData = {
+      inlineData: {
+        data: audioBuffer.toString('base64'),
+        mimeType: mimeType,
+      },
     }
     
-    // Step 2: Use Gemini to tag words/phrases by language
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+    // Prompt-engineered for structured JSON output with reasoning
+    const prompt = `Transcribe this audio and tag each word/phrase by language (Chinese 'zh', English 'en', or French 'fr'). For mixed words/phrases, use 'mixed'. 
+
+Analyze the audio carefully:
+1. Transcribe the complete spoken text accurately
+2. Identify the language of each word or phrase
+3. For code-switching scenarios (mixed languages), tag appropriately
+4. Group related words/phrases together when they form a single linguistic unit
+
+Return a structured JSON response with:
+- transcription: the full transcribed text
+- words: array of objects, each with "text" and "language" fields
+
+Be precise with language detection - consider context and pronunciation patterns.`
     
-    const prompt = `Given this transcribed text: "${transcription}"
-
-Tag each word/phrase by language (Chinese 'zh' or English 'en'). For mixed words/phrases, use 'mixed'. Tag each word or phrase separately.
-
-Return ONLY a valid JSON object in this exact format (no additional text, no markdown):
-{
-  "transcription": "${transcription}",
-  "words": [
-    {"text": "word or phrase", "language": "zh"},
-    {"text": "word or phrase", "language": "en"}
-  ]
-}
-
-The words array should contain each word or phrase from the transcription with its language tag. The transcription field should be the original transcribed text.`
-    
-    const result = await model.generateContent(prompt)
+    const result = await model.generateContent([prompt, fileData])
     const response = await result.response
-    const text = response.text()
     
-    // Clean the response - remove markdown code blocks if present
-    let cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    // Parse the structured JSON response
+    const responseText = response.text()
+    let parsed: TranscriptionResult
     
-    // Try to extract JSON if wrapped in other text
-    const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      cleanedText = jsonMatch[0]
+    try {
+      parsed = JSON.parse(responseText)
+    } catch (parseError) {
+      // Fallback: try to extract JSON if wrapped
+      let cleanedText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        cleanedText = jsonMatch[0]
+      }
+      parsed = JSON.parse(cleanedText)
     }
-    
-    const parsed: TranscriptionResult = JSON.parse(cleanedText)
-    
-    // Ensure transcription matches what we got from ElevenLabs
-    parsed.transcription = transcription
     
     // Validate response structure
     if (!parsed.transcription || !Array.isArray(parsed.words)) {
@@ -69,7 +111,7 @@ The words array should contain each word or phrase from the transcription with i
     
     // Provide more specific error messages
     if (error instanceof SyntaxError) {
-      throw new Error('Failed to parse language tagging response. The API may have returned invalid JSON.')
+      throw new Error('Failed to parse transcription response. The API may have returned invalid JSON.')
     }
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -82,8 +124,54 @@ export async function translateWithCodeswitching(
   originalLanguage: 'zh' | 'en' | 'fr' = 'zh',
   targetLanguage: 'zh' | 'en' | 'fr' = 'en'
 ): Promise<TranslationResponse> {
-  // Using gemini-2.5-flash (gemini-2.5-pro not available on free tier)
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+  // Using gemini-2.5-flash with structured JSON output
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-2.5-flash',
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'object',
+        properties: {
+          translated: {
+            type: 'string',
+            description: 'The complete translated text'
+          },
+          words: {
+            type: 'array',
+            description: 'Array of word objects with translations and metadata',
+            items: {
+              type: 'object',
+              properties: {
+                word: { type: 'string' },
+                pinyin: { type: 'string' },
+                english: { type: 'string' },
+                explanation: { type: 'string' },
+                partOfSpeech: { type: 'string' },
+                translations: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      connotation: { type: 'string' },
+                      translations: { type: 'array', items: { type: 'string' } },
+                      partOfSpeech: { type: 'string' }
+                    },
+                    required: ['connotation', 'translations', 'partOfSpeech']
+                  }
+                }
+              },
+              required: ['word', 'pinyin', 'english', 'explanation']
+            }
+          },
+          pinyin: {
+            type: 'string',
+            description: 'Pinyin for the entire translated sentence, or "N/A" if not applicable'
+          }
+        },
+        required: ['translated', 'words', 'pinyin']
+      }
+    }
+  })
 
   const langNames: Record<string, string> = {
     zh: 'Chinese (Mandarin)',
@@ -252,12 +340,21 @@ Return ONLY valid JSON, no additional text.`
   try {
     const result = await model.generateContent(prompt)
     const response = await result.response
-    const text = response.text()
+    const responseText = response.text()
     
-    // Clean the response - remove markdown code blocks if present
-    const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    
-    const parsed: TranslationResponse = JSON.parse(cleanedText)
+    // Parse structured JSON response (should already be valid JSON with responseSchema)
+    let parsed: TranslationResponse
+    try {
+      parsed = JSON.parse(responseText)
+    } catch (parseError) {
+      // Fallback: try to extract JSON if wrapped in markdown
+      let cleanedText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        cleanedText = jsonMatch[0]
+      }
+      parsed = JSON.parse(cleanedText)
+    }
     
     // Ensure all words have required fields
     parsed.words = parsed.words.map(word => ({
