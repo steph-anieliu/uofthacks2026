@@ -9,6 +9,10 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 
 export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionResult> {
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3cbc9417-70a3-4ada-8e6c-18446bbb1bd6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gemini.ts:10',message:'transcribeAudio entry',data:{audioSize:audioBlob.size,audioType:audioBlob.type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     // Validate audio size
     if (audioBlob.size === 0) {
       throw new Error('Audio file is empty')
@@ -20,6 +24,10 @@ export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionRes
     
     // Determine file MIME type (Gemini supports audio/webm, audio/mp3, audio/wav, etc.)
     const mimeType = audioBlob.type || 'audio/webm'
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3cbc9417-70a3-4ada-8e6c-18446bbb1bd6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gemini.ts:22',message:'audio converted',data:{bufferSize:audioBuffer.length,mimeType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     
     // Use Gemini 2.5 Flash with audio input + reasoning
     const model = genAI.getGenerativeModel({ 
@@ -66,26 +74,47 @@ export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionRes
       },
     }
     
-    // Prompt-engineered for structured JSON output with reasoning
-    const prompt = `Transcribe this audio and tag each word/phrase by language (Chinese 'zh', English 'en', or French 'fr'). For mixed words/phrases, use 'mixed'. 
+    // Prompt-engineered for structured JSON output with reasoning - optimized for multilanguage/code-switching
+    const prompt = `You are a multilingual transcription system. Transcribe this audio EXACTLY as spoken, preserving the original language of each word.
 
-Analyze the audio carefully:
-1. Transcribe the complete spoken text accurately
-2. Identify the language of each word or phrase
-3. For code-switching scenarios (mixed languages), tag appropriately
-4. Group related words/phrases together when they form a single linguistic unit
+IMPORTANT: This is TRANSCRIPTION, NOT translation. Do NOT convert words to another language.
 
-Return a structured JSON response with:
-- transcription: the full transcribed text
-- words: array of objects, each with "text" and "language" fields
+Examples:
+- If speaker says "ni hao hello" → transcribe as "ni hao hello" (NOT "你好哈啰")
+- If speaker says "bonjour hello" → transcribe as "bonjour hello" (NOT "hello hello" or "你好你好")
+- If speaker says "你好 hello" → transcribe as "你好 hello" (preserve both languages)
 
-Be precise with language detection - consider context and pronunciation patterns.`
+Rules:
+1. Transcribe each word/phrase in its ORIGINAL language as spoken
+2. Tag each word/phrase by its detected language: 'zh' (Chinese), 'en' (English), 'fr' (French), or 'mixed'
+3. Do NOT translate - only transcribe what was actually said
+4. Preserve code-switching: if the speaker switches languages mid-sentence, transcribe both languages
+
+Return JSON:
+{
+  "transcription": "exact transcription preserving original languages",
+  "words": [
+    {"text": "ni hao", "language": "zh"},
+    {"text": "hello", "language": "en"}
+  ]
+}
+
+Be precise with language detection. Preserve the exact words spoken in their original languages.`
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3cbc9417-70a3-4ada-8e6c-18446bbb1bd6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gemini.ts:96',message:'calling Gemini API',data:{promptLength:prompt.length,mimeType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     
     const result = await model.generateContent([prompt, fileData])
     const response = await result.response
     
     // Parse the structured JSON response
     const responseText = response.text()
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3cbc9417-70a3-4ada-8e6c-18446bbb1bd6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gemini.ts:100',message:'Gemini raw response',data:{responseText,responseLength:responseText.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     let parsed: TranscriptionResult
     
     try {
@@ -100,10 +129,18 @@ Be precise with language detection - consider context and pronunciation patterns
       parsed = JSON.parse(cleanedText)
     }
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3cbc9417-70a3-4ada-8e6c-18446bbb1bd6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gemini.ts:113',message:'parsed response',data:{transcription:parsed.transcription,wordsCount:parsed.words?.length,words:parsed.words},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     // Validate response structure
     if (!parsed.transcription || !Array.isArray(parsed.words)) {
       throw new Error('Invalid response format from Gemini API')
     }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3cbc9417-70a3-4ada-8e6c-18446bbb1bd6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gemini.ts:120',message:'returning transcription result',data:{transcription:parsed.transcription},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     
     return parsed
   } catch (error) {
@@ -185,12 +222,12 @@ export async function translateWithCodeswitching(
   const isOriginalChinese = originalLanguage === 'zh'
 
   // Template for Pattern A: Non-Chinese → Chinese (extract Chinese translations with pinyin)
-  const translateToChineseTemplate = (sourceLang: string) => `Given this ${sourceLang} text (may contain some Chinese): "${text}"
+  const translateToChineseTemplate = (sourceLang: string) => `Given this ${sourceLang} text that may contain mixed ${sourceLang} and Chinese (code-switching/multilanguage input): "${text}"
 
 Your task:
-1. Identify each ${sourceLang} word/phrase that needs to be translated to Chinese
+1. Identify each word/phrase and determine its language (${sourceLang} or Chinese)
 2. Translate each ${sourceLang} word/phrase to Chinese, keeping any Chinese words unchanged
-3. Create a natural Chinese translation that combines everything
+3. Create a natural Chinese translation that combines everything - the output should be entirely in Chinese
 4. For each ${sourceLang} word that was translated to Chinese, extract the translation with:
    - The original ${sourceLang} word
    - Its part of speech (adj, noun, verb, etc.)
@@ -224,12 +261,12 @@ Only include translated Chinese words (that came from ${sourceLang}) in the word
 Return ONLY valid JSON, no additional text.`
 
   // Template for Pattern B: Chinese → Non-Chinese (extract original Chinese words)
-  const translateFromChineseTemplate = (targetLang: string) => `Given this Chinese text (may contain some ${targetLang}): "${text}"
+  const translateFromChineseTemplate = (targetLang: string) => `Given this Chinese text that may contain mixed Chinese and ${targetLang} (code-switching/multilanguage input): "${text}"
 
 Your task:
-1. Identify each Chinese word/phrase that needs to be translated to ${targetLang}
+1. Identify each word/phrase and determine its language (Chinese or ${targetLang})
 2. Translate each Chinese word/phrase to ${targetLang}, keeping any ${targetLang} words unchanged
-3. Create a natural ${targetLang} translation that combines everything
+3. Create a natural ${targetLang} translation that combines everything - the output should be entirely in ${targetLang}
 4. Extract all Chinese words with:
    - The Chinese characters
    - Pinyin with tone marks
@@ -264,12 +301,12 @@ Only include Chinese words in the words array. Do not include ${targetLang} word
 Return ONLY valid JSON, no additional text.`
 
   // Template for Pattern C: Non-Chinese → Non-Chinese (extract translated words, no pinyin)
-  const translateBetweenNonChineseTemplate = (sourceLang: string, targetLang: string) => `Given this ${sourceLang} text (may contain some ${targetLang}): "${text}"
+  const translateBetweenNonChineseTemplate = (sourceLang: string, targetLang: string) => `Given this ${sourceLang} text that may contain mixed ${sourceLang} and ${targetLang} (code-switching/multilanguage input): "${text}"
 
 Your task:
-1. Identify each ${sourceLang} word/phrase that needs to be translated to ${targetLang}
+1. Identify each word/phrase and determine its language (${sourceLang} or ${targetLang})
 2. Translate each ${sourceLang} word/phrase to ${targetLang}, keeping any ${targetLang} words unchanged
-3. Create a natural ${targetLang} translation that combines everything
+3. Create a natural ${targetLang} translation that combines everything - the output should be entirely in ${targetLang}
 4. For each ${sourceLang} word that was translated to ${targetLang}, extract it with:
    - The original ${sourceLang} word
    - Its part of speech (adj, noun, verb, etc.)
@@ -298,10 +335,14 @@ Return a JSON object in this exact format:
   "pinyin": "N/A"
 }
 
-IMPORTANT: If a word has only ONE translation, still include it in the translations array with a single entry. If a word has MULTIPLE translations with different connotations, include ALL of them. For example, "happy" might have:
-- translations: [{"connotation": "full of joy", "translations": ["heureux", "heureuse"], "partOfSpeech": "adj"}, {"connotation": "satisfied", "translations": ["content", "contente"], "partOfSpeech": "adj"}]
-
-Only include translated ${targetLang} words (that came from ${sourceLang}) in the words array. Do not include words that were already in ${targetLang}.
+IMPORTANT: 
+- Handle multilanguage/code-switching input correctly: identify the language of each word/phrase
+- If a word has only ONE translation, still include it in the translations array with a single entry
+- If a word has MULTIPLE translations with different connotations, include ALL of them. For example, "happy" might have:
+  - translations: [{"connotation": "full of joy", "translations": ["heureux", "heureuse"], "partOfSpeech": "adj"}, {"connotation": "satisfied", "translations": ["content", "contente"], "partOfSpeech": "adj"}]
+- Only include translated ${targetLang} words (that came from ${sourceLang}) in the words array
+- Do not include words that were already in ${targetLang} (they should remain unchanged in the translation)
+- The final translation should be entirely in ${targetLang}, with all ${sourceLang} words translated
 Return ONLY valid JSON, no additional text.`
 
   // Determine which pattern to use and generate the prompt

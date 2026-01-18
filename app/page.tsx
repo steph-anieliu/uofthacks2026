@@ -167,6 +167,16 @@ export default function Home() {
     handleTranslate(text)
   }
 
+  const handleTranscriptUpdate = (text: string, isFinal: boolean) => {
+    // Update input text in real-time as user speaks
+    setInputText(text)
+    
+    // If it's a final result, trigger translation
+    if (isFinal && text.trim()) {
+      handleTranslate(text)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -240,7 +250,13 @@ export default function Home() {
             </div>
 
             <div className="flex justify-center">
-              <AudioInput onTranscript={handleTranscript} disabled={loading} />
+              <AudioInput 
+                onTranscript={handleTranscript}
+                onTranscriptUpdate={handleTranscriptUpdate}
+                disabled={loading}
+                originalLanguage={originalLanguage}
+                targetLanguage={targetLanguage}
+              />
             </div>
           </CardContent>
         </Card>
